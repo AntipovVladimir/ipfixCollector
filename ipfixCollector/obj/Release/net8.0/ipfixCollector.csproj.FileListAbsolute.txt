@@ -1,0 +1,12 @@
+e:\Work\Projects\ipfixCollector\ipfixCollector\bin\Release\net8.0\ipfixCollector.deps.json
+e:\Work\Projects\ipfixCollector\ipfixCollector\bin\Release\net8.0\ipfixCollector.dll
+e:\Work\Projects\ipfixCollector\ipfixCollector\bin\Release\net8.0\ipfixCollector.pdb
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.csproj.AssemblyReference.cache
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.GeneratedMSBuildEditorConfig.editorconfig
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.AssemblyInfoInputs.cache
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.AssemblyInfo.cs
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.csproj.CoreCompileInputs.cache
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.dll
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\refint\ipfixCollector.dll
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ipfixCollector.pdb
+e:\Work\Projects\ipfixCollector\ipfixCollector\obj\Release\net8.0\ref\ipfixCollector.dll

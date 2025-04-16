@@ -1,0 +1,13 @@
+/collectorService/bin/*
+/collectorService/obj/Debug/*
+/fixclean/bin/*
+/fixclean/obj/Debug/*
+/fixconv/*
+/fixpack/bin/*
+/fixpack/obj/Debug/*
+/ipfixCollector/bin/*
+/ipfixCollector/obj/Debug/*
+/searcher/bin/*
+/searcher/obj/Debug/*
+/test/*
+/.idea/*
