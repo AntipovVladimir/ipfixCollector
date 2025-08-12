@@ -15,7 +15,7 @@ namespace ipfixCollector;
 
 public class CollectorServer
 {
-    private const int IPFIX_PACKET_MAX_SIZE = 512;
+    private const int IPFIX_PACKET_MAX_SIZE = 1500;
     private const int PORT_TO_LISTEN_TO = 1500;
     readonly IPEndPoint RemoteEndPoint = new(IPAddress.Any, PORT_TO_LISTEN_TO);
     private static readonly Logger Log = LogManager.GetLogger("error");
@@ -442,27 +442,44 @@ public class CollectorServer
         Templates.Add(template.TemplateId, template);
     }
 
-    byte[] m_parseOptions(ipfixHeader header, ReadOnlySpan<byte> payload)
+    private const int fixedPayload = 36;
+
+    void m_parseOptions(ipfixHeader header, ReadOnlySpan<byte> payload)
     {
-        if (payload.Length < 57)
-            return Array.Empty<byte>();
-        if (!Templates.TryGetValue(header.SetId, out OptionsTemplate template))
-            return Array.Empty<byte>();
+        int plength = payload.Length;
+        if (plength < 57) return;
+        if (!Templates.TryGetValue(header.SetId, out OptionsTemplate template)) return;
 
         byte[] fixedRaw = new byte[52];
         Memory<byte> buf = fixedRaw;
-        Span<byte> span = buf.Slice(0, 36).Span;
-        payload.Slice(20, 36).CopyTo(span);
-        if (payload.Length == 57)
-            return fixedRaw;
-        int len = payload[56];
-        if (payload.Length >= 57 + len && len is > 0 and < 17)
+        int currentOffset = 20;
+        while (currentOffset < plength - fixedPayload)
         {
-            span = buf.Slice(36, len).Span;
-            payload.Slice(57, len).CopyTo(span);
-        }
+            int strlen = 0;
+            Span<byte> span = buf.Slice(0, fixedPayload).Span;
+            payload.Slice(currentOffset, fixedPayload).CopyTo(span);
+            currentOffset += fixedPayload;
+            strlen = payload[currentOffset];
+            currentOffset++;
+            if (strlen == 0)
+            {
+                WriteData(fixedRaw);
+                continue;
+            }
 
-        return fixedRaw;
+            if ((strlen > plength - currentOffset) || strlen > 16)
+            {
+                WriteData(fixedRaw);
+                Log.Error("strlen>payload.Length - currentOffset or username length > 16, packet is broken");
+                Log.Error(string.Format("payloadlen: {0}, currentOffset: {1}, strlen: {2}", plength, currentOffset, strlen));
+                break;
+            }
+
+            span = buf.Slice(fixedPayload, strlen).Span;
+            payload.Slice(currentOffset, strlen).CopyTo(span);
+            WriteData(fixedRaw);
+            currentOffset += strlen;
+        }
     }
 
     void m_parsePayload(ReadOnlySpan<byte> payload)
@@ -479,18 +496,14 @@ public class CollectorServer
             DomainId = BinaryPrimitives.ReadUInt32BigEndian(payload.Slice(12, 4)),
             SetId = BinaryPrimitives.ReadUInt16BigEndian(payload.Slice(16, 2))
         };
-        if (header.Version != 10)
-            return;
-
-        if (payload.Length < 24)
-            return;
-        byte[] bytesDump = Array.Empty<byte>();
+        if (header.Version != 10) return;
+        if (payload.Length < 24) return;
         try
         {
             if (header.SetId == 3)
                 parseOptionsTemplate(header, payload);
             else if (header.SetId >= 256)
-                bytesDump = m_parseOptions(header, payload);
+                m_parseOptions(header, payload);
         }
         catch (Exception ex)
         {
@@ -502,10 +515,6 @@ public class CollectorServer
                 Log.Error(ex.InnerException.StackTrace);
             }
         }
-
-        if (bytesDump.Length == 0)
-            return;
-        WriteData(bytesDump);
     }
 
 
@@ -537,8 +546,7 @@ public class CollectorServer
 //    [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")]
     void WriteData(ReadOnlySpan<byte> buf)
     {
-        if (buf.Length != 52)
-            return;
+        if (buf.Length != 52) return;
         ulong dts = BinaryPrimitives.ReadUInt64BigEndian(buf.Slice(0, 8));
         DateTime dt = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(dts);
         int year = dt.Year;
@@ -555,6 +563,7 @@ public class CollectorServer
                     writers.TryAdd(filename, new BufferWriter(path, filename));
                 writer = writers[filename];
             }
+
             if (writer is null || writer.IsDisposed) // maybe it is already disposed!
             {
                 writer = new BufferWriter(path, filename);

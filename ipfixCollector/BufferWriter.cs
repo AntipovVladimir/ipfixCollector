@@ -3,6 +3,7 @@
 public class BufferWriter : IDisposable
 {
     private const int simultaneousBuffers = 16;
+    private const int bufferLength = 4096; // packets
     private const int limitReached = simultaneousBuffers / 2;
     private readonly StreamWriter _streamWriter;
     public long LastAccessedTime { get; private set; }
@@ -12,7 +13,7 @@ public class BufferWriter : IDisposable
         if (!string.IsNullOrWhiteSpace(path) && !Directory.Exists(path))
             Directory.CreateDirectory(path);
         _streamWriter = new StreamWriter(filename, append: true);
-        m_buffer = new ManagedBuffer();
+        m_buffer = new ManagedBuffer(bufferLength);
         LastAccessedTime = Environment.TickCount64;
     }
 
@@ -31,7 +32,7 @@ public class BufferWriter : IDisposable
             }
 
             m_buffers.Enqueue(m_buffer);
-            m_buffer = new ManagedBuffer();
+            m_buffer = new ManagedBuffer(bufferLength);
         }
 
         m_buffer.Insert(data);
