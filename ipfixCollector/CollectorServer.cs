@@ -443,7 +443,7 @@ public class CollectorServer
     }
 
     private const int fixedPayload = 36;
-    private static readonly byte[] sizeNuller = new byte[16] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0,0,0,0,0};
+    private static readonly byte[] sizeNuller = new byte[16] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     void m_parseOptions(ipfixHeader header, ReadOnlySpan<byte> payload)
     {
@@ -475,9 +475,9 @@ public class CollectorServer
                 Log.Error(string.Format("payloadlen: {0}, currentOffset: {1}, strlen: {2}", plength, currentOffset, strlen));
                 break;
             }
-
-            span = buf.Slice(fixedPayload, strlen).Span;
+            span = buf.Slice(fixedPayload, 16).Span;
             sizeNuller.CopyTo(span);
+            span = buf.Slice(fixedPayload, strlen).Span;
             payload.Slice(currentOffset, strlen).CopyTo(span);
             WriteData(fixedRaw);
             currentOffset += strlen;
