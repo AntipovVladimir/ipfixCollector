@@ -24,3 +24,34 @@ space requirements:
 calculated by rules: one raw event = 52 byte, one aggregated flow = 55 byte, header size = 20b;
 for raw unpacked data, ~6GB per four for storing 60gbps cgnat average load under 30k+ customers, or ~150GB per day
 minimum 4TB per month cycle buffer with packing every night (by cron) and storing in long-term storage (estimated calculation 15TB per year then fixpack chained with gzip)
+
+To run as service under Linux:
+- build solution
+```
+dotnet publish -c Release -o /home/collector/
+```
+- create file /etc/systemd/system/ipfixCollector.service :
+```[Unit]
+Description=ipfixCollector
+
+[Service]
+Type=notify
+ExecStart=/home/collector/collectorService
+
+[Install]
+WantedBy=multi-user.target
+```
+- reload systemd and enable service
+```
+  systemctl daemon-reload
+  systemctl enable ipfixCollector
+  systemctl start ipfixCollector  
+```
+
+To run as windows service:
+- use sc.exe
+```
+sc.exe create ipfixCollector binpath= c:\collector\collectorService.exe type= share start= auto
+net start ipfixCollector
+```
+
