@@ -136,11 +136,25 @@ class PairRecord
     {
         StringBuilder sb = new StringBuilder();
         DateTime dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+        DateTime dateTimeS = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         ulong ts = BinaryPrimitives.ReadUInt64BigEndian(SystemTimeEventStart);
-        sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: {BinaryPrimitives.ReadUInt64BigEndian(SystemTimeEventStop)},");
+        ulong tstop = BinaryPrimitives.ReadUInt64BigEndian(SystemTimeEventStop);
+        bool hasStop = true;
+        try
+        {
+            DateTime stop = dateTimeS.AddHours(3).AddMilliseconds(tstop);
+        }
+        catch (Exception )
+        {
+            hasStop = false;
+        }
+        if (hasStop)
+            sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: {dateTimeS.AddHours(3).AddMilliseconds(tstop)} ({tstop}),");
+        else 
+            sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: data corrupt (old version),");
         sb.Append($"Protocol: {ProtocolIdentifier[0]},");
         sb.Append(
-            $"Destination: {DestinationAddress[0]}.{DestinationAddress[1]}.{DestinationAddress[2]}.{DestinationAddress[3]}:{BinaryPrimitives.ReadUInt16BigEndian(DestinationPort)},,");
+            $"Destination: {DestinationAddress[0]}.{DestinationAddress[1]}.{DestinationAddress[2]}.{DestinationAddress[3]}:{BinaryPrimitives.ReadUInt16BigEndian(DestinationPort)},");
         sb.Append(
             $"Source: {SourceAddress[0]}.{SourceAddress[1]}.{SourceAddress[2]}.{SourceAddress[3]}:{BinaryPrimitives.ReadUInt16BigEndian(SourcePort)},");
         sb.Append($"Login: {Encoding.ASCII.GetString(Login).Trim()} PostNatSourcePort: {BinaryPrimitives.ReadUInt16BigEndian(PostNatSourcePort)}");
