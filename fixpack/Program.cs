@@ -165,12 +165,12 @@ class PairRecord
         if (firstRecord.TypeOfEvent == 1)
         {
             firstRecord.Span.Slice(0, 8).CopyTo(SystemTimeEventStart);
-            secondRecord.Span.Slice(8, 8).CopyTo(SystemTimeEventStop);
+            secondRecord.Span.Slice(0, 8).CopyTo(SystemTimeEventStop);
         }
         else if (firstRecord.TypeOfEvent == 2)
         {
             secondRecord.Span.Slice(0, 8).CopyTo(SystemTimeEventStart);
-            firstRecord.Span.Slice(8, 8).CopyTo(SystemTimeEventStop);
+            firstRecord.Span.Slice(0, 8).CopyTo(SystemTimeEventStop);
         }
 
         _buffer[16] = firstRecord.ProtocolIndetifier;
@@ -262,10 +262,10 @@ class PairDataHeader
 
 class Packer
 {
-    readonly Dictionary<ulong, OneRecord> oneRecords = new Dictionary<ulong, OneRecord>();
-    private readonly Queue<OneRecord> unpairedRecords = new Queue<OneRecord>();
-    private readonly Queue<PairRecord> pairRecords = new Queue<PairRecord>();
-    private readonly Dictionary<string, StreamWriter> writes = new Dictionary<string, StreamWriter>();
+    readonly Dictionary<ulong, OneRecord> oneRecords = new ();
+    private readonly Queue<OneRecord> unpairedRecords = new ();
+    private readonly Queue<PairRecord> pairRecords = new ();
+    private readonly Dictionary<string, StreamWriter> writes = new ();
 
     private readonly bool _forceFileDelete;
 
