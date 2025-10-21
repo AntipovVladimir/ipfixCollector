@@ -1,34 +1,39 @@
-﻿namespace ipfixCollector;
+﻿using NLog;
+
+namespace ipfixCollector;
 
 public class BufferWriter : IDisposable
 {
-    private const int simultaneousBuffers = 16;
-    private const int bufferLength = 4096; // packets
+    private const int simultaneousBuffers = 32;
+    private const int bufferLength = 8000; // packets
     private const int limitReached = simultaneousBuffers / 2;
-    private readonly StreamWriter _streamWriter;
+    private StreamWriter _streamWriter;
+    private static readonly TaskFactory m_task_factory = new();
     public long LastAccessedTime { get; private set; }
-
+    private static readonly Logger Log = LogManager.GetLogger("error");
+    private readonly string _filename;
     public BufferWriter(string path, string filename)
     {
         if (!string.IsNullOrWhiteSpace(path) && !Directory.Exists(path))
             Directory.CreateDirectory(path);
+        _filename = filename;
         _streamWriter = new StreamWriter(filename, append: true);
         m_buffer = new ManagedBuffer(bufferLength);
         LastAccessedTime = Environment.TickCount64;
     }
 
     private ManagedBuffer m_buffer;
-    private readonly Queue<ManagedBuffer> m_buffers = new Queue<ManagedBuffer>(simultaneousBuffers);
+    private readonly Queue<ManagedBuffer> m_buffers = new (simultaneousBuffers);
     public bool IsDisposed => isDisposed;
-    public bool Write(ReadOnlySpan<byte> data)
+
+    public void Write(ReadOnlySpan<byte> data)
     {
-        if (isDisposed)
-            return false;
+        if (isDisposed) return;
         if (m_buffer.IsFull)
         {
             if (m_buffers.Count == limitReached)
             {
-                Task.Run(FlushBuffers).ConfigureAwait(ConfigureAwaitOptions.None);
+                m_task_factory.StartNew(async () => await FlushBuffers());
             }
 
             m_buffers.Enqueue(m_buffer);
@@ -37,32 +42,47 @@ public class BufferWriter : IDisposable
 
         m_buffer.Insert(data);
         LastAccessedTime = Environment.TickCount64;
-        return true;
     }
 
-    private async Task FlushBuffers()
+    private async Task FlushBuffers(bool all = false)
     {
-        if (m_buffers is null)
-            return;
-        while (m_buffers.Any())
+        while (m_buffers is not null && m_buffers.Count > 0)
         {
             var buf = m_buffers.Dequeue();
-            var buffer = buf.GetBufferArray();
-            if (!buffer.IsEmpty)
-                await _streamWriter.BaseStream.WriteAsync(buffer);
+            if ((!all && buf.IsFull) || (all && !buf.IsEmpty))
+            {
+                await _streamWriter.BaseStream.WriteAsync(buf.GetBufferArray());
+                buf.Flush();
+            }
         }
     }
 
-    private bool isDisposed ;
+    private bool isDisposed;
 
     public void Dispose()
     {
-        if (isDisposed)
-            return;
-        FlushBuffers().Wait();
-        if (!m_buffer.IsEmpty)
-            _streamWriter.BaseStream.Write(m_buffer.GetBuffer());
-        _streamWriter.Close();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (isDisposed) return;
+        if (disposing)
+        {
+            FlushBuffers(true).Wait();
+            if (!m_buffer.IsEmpty)
+            {
+                _streamWriter.BaseStream.Write(m_buffer.GetBuffer());
+                m_buffer.Flush();
+            }
+            m_buffer.Dispose();
+            m_buffer = null;
+            _streamWriter.Close();
+            _streamWriter.Dispose();
+            _streamWriter = null;
+        }
+
         isDisposed = true;
     }
 }

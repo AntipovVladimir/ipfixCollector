@@ -1,6 +1,5 @@
 ﻿using System.Buffers.Binary;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -19,8 +18,7 @@ public class CollectorServer
     private const int PORT_TO_LISTEN_TO = 1500;
     readonly IPEndPoint RemoteEndPoint = new(IPAddress.Any, PORT_TO_LISTEN_TO);
     private static readonly Logger Log = LogManager.GetLogger("error");
-    private static readonly Logger CollectorLog = LogManager.GetLogger("file");
-
+    
     private readonly bool debug;
 /*
  * WARNING!
@@ -65,8 +63,9 @@ public class CollectorServer
         ConfigureLogging(_console);
         PrepareBuffers();
         init();
+
         FlushTimer = new System.Timers.Timer();
-        FlushTimer.Interval = 300000;
+        FlushTimer.Interval = 30_000;
         FlushTimer.Elapsed += FlushUnusedWriters;
         FlushTimer.Enabled = true;
     }
@@ -81,7 +80,7 @@ public class CollectorServer
             m_bufferManagerB.Insert(b);
         }
 
-        Log.Info(string.Format("Builded {0} packet buffers", MaxSimultaneousBuffers));
+        Log.Info(string.Format("Built {0} packet buffers", MaxSimultaneousBuffers));
     }
 
     private int MaxSimultaneousBuffers { get; set; } = 256000;
@@ -475,6 +474,7 @@ public class CollectorServer
                 Log.Error(string.Format("payloadlen: {0}, currentOffset: {1}, strlen: {2}", plength, currentOffset, strlen));
                 break;
             }
+
             span = buf.Slice(fixedPayload, 16).Span;
             sizeNuller.CopyTo(span);
             span = buf.Slice(fixedPayload, strlen).Span;
@@ -486,8 +486,7 @@ public class CollectorServer
 
     void m_parsePayload(ReadOnlySpan<byte> payload)
     {
-        if (payload.Length < 18)
-            return;
+        if (payload.Length < 18) return;
         StringBuilder sb = new();
         ipfixHeader header = new ipfixHeader()
         {
@@ -525,24 +524,47 @@ public class CollectorServer
 
     void FlushUnusedWriters(object sender, EventArgs args)
     {
+        Log.Info("flush unused writers run");
         long currentTick = Environment.TickCount64;
         Queue<string> toRemove = new Queue<string>();
-        ImmutableDictionary<string, BufferWriter> heckWriters;
-        lock (writers)
-            heckWriters = writers.ToImmutableDictionary();
-        foreach (KeyValuePair<string, BufferWriter> kvp in heckWriters)
+        int totalWriters = writers.Count;
+        int totalWritersToRemove = 0;
+
+        foreach (KeyValuePair<string, BufferWriter> kvp in writers)
         {
-            if (currentTick - kvp.Value.LastAccessedTime >= 86_400_000) // 24h 
+            if (kvp.Value is null) continue;
+            if (currentTick - kvp.Value.LastAccessedTime >= 3_600_000) // 1h, 43_200_000) // 12h 
             {
-                kvp.Value.Dispose();
                 toRemove.Enqueue(kvp.Key);
-                Log.Info(string.Format("releasing unused writer: {0}", kvp.Key));
+                totalWritersToRemove++;
             }
         }
 
+        try
+        {
+            Log.Info("Total Memory: {0}", GC.GetTotalMemory(false));
+            Log.Info(string.Format("writers status: [{0}/{1}]", totalWritersToRemove, totalWriters));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex.Message);
+            Log.Error(ex.StackTrace);
+        }
+
         lock (writers)
-            while (toRemove.Any())
-                writers.Remove(toRemove.Dequeue(), out _);
+            while (toRemove.Count > 0)
+            {
+                string writerName = toRemove.Dequeue();
+                var writer = writers[writerName];
+                writers[writerName] = null;
+                if (writer != null)
+                {
+                    writer.Dispose();
+                    writer = null;
+                }
+                Log.Info(string.Format("releasing unused writer: {0}", writerName));
+            }
+        GC.Collect();
     }
 
 //    [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")]
@@ -562,13 +584,18 @@ public class CollectorServer
             lock (writers)
             {
                 if (!writers.ContainsKey(filename))
+                {
                     writers.TryAdd(filename, new BufferWriter(path, filename));
+                    Log.Info(string.Format("Added writer for {0}", filename));
+                }
+
                 writer = writers[filename];
             }
 
             if (writer is null || writer.IsDisposed) // maybe it is already disposed!
             {
                 writer = new BufferWriter(path, filename);
+                Log.Info(string.Format("Reopened writer for {0}", filename));
                 lock (writers)
                     writers[filename] = writer;
             }
