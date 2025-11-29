@@ -23,23 +23,19 @@ public sealed class ManagedQueue<T>
 
     public T TakeNext()
     {
-        if (m_queue is null)
-            throw new InvalidOperationException("The queue cannot be null");
+        if (m_queue is null) throw new InvalidOperationException("The queue cannot be null");
         m_restrictor.Wait();
         lock (m_queue)
         {
-            if (m_queue.Count > 0)
-                return m_queue.Dequeue();
+            if (m_queue.Count > 0) return m_queue.Dequeue();
             throw new Exception("There has been a Semaphore/queue offset");
         }
     }
 
     public void Insert(T item)
     {
-        if (m_queue is null)
-            throw new InvalidOperationException("The queue cannot be null");
-        if (item is null)
-            throw new ArgumentException("The item cannot be null");
+        if (m_queue is null) throw new InvalidOperationException("The queue cannot be null");
+        if (item is null) throw new ArgumentException("The item cannot be null");
         lock (m_queue)
         {
             m_queue.Enqueue(item);

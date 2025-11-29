@@ -20,7 +20,7 @@ internal class Cleaner
             byte[] sheader = Encoding.ASCII.GetBytes("FLEXRAWNATLOG");
             ushort version = BinaryPrimitives.ReadUInt16LittleEndian(sh.Slice(13, 2));
             bool proceedrename = false;
-            if (sh.Slice(0, 13).ToArray().SequenceEqual(sheader) && version == 1)
+            if (sh.Slice(0, 13).SequenceEqual(sheader) && version == 1)
             {
                 ReadOnlySpan<byte> postNatSourceAddress = sh.Slice(15, 4);
                 byte[] buffer = new byte[55];

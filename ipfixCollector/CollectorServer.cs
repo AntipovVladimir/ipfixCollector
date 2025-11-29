@@ -42,8 +42,8 @@ public class CollectorServer
         {
             FileName = @"./Logs/collector.error.log",
             Layout = @"${date:format=yyyy.MM.dd HH\:mm\:ss} ${message}",
-            ArchiveFileName = @"./Logs/collector.error.{##}.log",
-            ArchiveNumbering = ArchiveNumberingMode.Date,
+            ArchiveFileName = @"./Logs/collector.error.log",
+            ArchiveSuffixFormat = @".{1:yyyyMMdd}",
             ArchiveEvery = FileArchivePeriod.Day,
             MaxArchiveDays = 500
         });
@@ -259,8 +259,8 @@ public class CollectorServer
         {
             TemplateId = 256,
             FieldCount = 11,
-            TemplateField = new[]
-            {
+            TemplateField =
+            [
                 new templateField() { ElementId = 323, EnterpriseNumber = 0, Length = 8 },
                 new templateField() { ElementId = 4, EnterpriseNumber = 0, Length = 1 },
                 new templateField() { ElementId = 230, EnterpriseNumber = 0, Length = 1 },
@@ -271,18 +271,12 @@ public class CollectorServer
                 new templateField() { ElementId = 12, EnterpriseNumber = 0, Length = 4 },
                 new templateField() { ElementId = 11, EnterpriseNumber = 0, Length = 2 },
                 new templateField() { ElementId = 2000, EnterpriseNumber = 0, Length = 8 },
-                new templateField() { ElementId = 2003, EnterpriseNumber = 0, Length = 0 },
-            }
+                new templateField() { ElementId = 2003, EnterpriseNumber = 0, Length = 0 }
+            ]
         };
         Templates.Add(256, template);
     }
-
-    string byteArrayToIp(ReadOnlySpan<byte> data)
-    {
-        if (data.Length != 4)
-            return "0.0.0.0";
-        return string.Format("{0}.{1}.{2}.{3}", data[0], data[1], data[2], data[3]);
-    }
+  
 /*
  323	0	8	int64	SYSTEM_TIME_WHEN_THE_EVENT_OCCURRED	Системное время, когда произошло событие
 4	0	1	int8	PROTOCOL_IDENTIFIER	Идентификатор протокола транспортного уровня
@@ -296,7 +290,6 @@ public class CollectorServer
 2000	43823	8	int64	SESSION_ID	Идентификатор сессии
 2003	43823	-	string	LOGIN	User name при входе в систему
  */
-
 
     private readonly Dictionary<byte, string> NatEvents = new()
     {
@@ -442,7 +435,7 @@ public class CollectorServer
     }
 
     private const int fixedPayload = 36;
-    private static readonly byte[] sizeNuller = new byte[16] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    private static readonly byte[] sizeNuller = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"u8.ToArray(); // 16 byte
 
     void m_parseOptions(ipfixHeader header, ReadOnlySpan<byte> payload)
     {
@@ -509,11 +502,13 @@ public class CollectorServer
         catch (Exception ex)
         {
             Log.Error(ex.Message);
-            Log.Error(ex.StackTrace);
+            if (ex.StackTrace != null)
+                Log.Error(ex.StackTrace);
             if (ex.InnerException != null)
             {
                 Log.Error(ex.InnerException.Message);
-                Log.Error(ex.InnerException.StackTrace);
+                if (ex.InnerException.StackTrace != null)
+                    Log.Error(ex.InnerException.StackTrace);
             }
         }
     }
@@ -548,7 +543,8 @@ public class CollectorServer
         catch (Exception ex)
         {
             Log.Error(ex.Message);
-            Log.Error(ex.StackTrace);
+            if (ex.StackTrace  != null)
+                Log.Error(ex.StackTrace);
         }
 
         lock (writers)
@@ -605,7 +601,8 @@ public class CollectorServer
         catch (Exception ex)
         {
             Log.Error(ex.Message);
-            Log.Error(ex.StackTrace);
+            if (ex.StackTrace != null)
+                Log.Error(ex.StackTrace);
         }
     }
 }

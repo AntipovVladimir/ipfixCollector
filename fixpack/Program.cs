@@ -2,15 +2,20 @@
 
 
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Text;
 
-
-if (Environment.GetCommandLineArgs().Length < 2)
+void printHelp()
 {
     Console.WriteLine("Usage: fixpack input.raw [-f] [-o path]");
     Console.WriteLine("options:");
     Console.WriteLine("\t-f - force delete input files after processing");
     Console.WriteLine("\t-o path - output path for processing result, instead of current dir");
+}
+
+if (Environment.GetCommandLineArgs().Length < 2)
+{
+    printHelp();
     return;
 }
 
@@ -26,15 +31,19 @@ foreach (var arg in iargs)
             forceDeleteInputFiles = true;
             break;
         case "-o":
-            Console.WriteLine( "{0}/{1}", index, iargs.Length);
-            
+            Console.WriteLine("{0}/{1}", index, iargs.Length);
+
             if (iargs.Length > index + 1)
             {
                 forceOutputPath = Directory.Exists(iargs[index + 1]) ? iargs[index + 1] : string.Empty;
-		        Console.WriteLine(forceOutputPath);
+                Console.WriteLine(forceOutputPath);
             }
 
             break;
+        case "-h":
+        case "--help":
+            printHelp();
+            return;
     }
     index++;
 }
@@ -69,7 +78,7 @@ else
     packer.Run(inputFileName, forceOutputPath);
 }
 
-class OneRecord
+class OneRecord(ReadOnlySpan<byte> buffer)
 {
     public override string ToString()
     {
@@ -89,38 +98,8 @@ class OneRecord
     }
 
 
-    private readonly byte[] _buffer;
+    private readonly byte[] _buffer = buffer.ToArray();
     public ReadOnlySpan<byte> Span => _buffer;
-
-    public OneRecord(ReadOnlySpan<byte> buffer)
-    {
-        _buffer = buffer.ToArray();
-        /*    if (buffer[0] == 0 && buffer[1] == 0 && buffer[2] == 1)
-                fix = false;
-            if (fix)
-            {
-                SystemtimeEvent = BinaryPrimitives.ReadUInt64LittleEndian(buffer.Slice(0, 8));
-                SourcePort = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(18, 2));
-                PostNatSourcePort = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(20, 2));
-                DestinationPort = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(26, 2));
-                SessionId = BinaryPrimitives.ReadUInt64LittleEndian(buffer.Slice(28, 8));
-            }
-            else
-            {
-                SystemtimeEvent = BinaryPrimitives.ReadUInt64BigEndian(buffer.Slice(0, 8));
-                SourcePort = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(18, 2));
-                PostNatSourcePort = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(20, 2));
-                DestinationPort = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(26, 2));
-                SessionId = BinaryPrimitives.ReadUInt64BigEndian(buffer.Slice(28, 8));
-            }
-    
-            ProtocolIndetifier = buffer[8];
-            TypeOfEvent = buffer[9];
-            SourceAddress = buffer.Slice(10, 4).ToArray();
-            PostNatSourceAddress = buffer.Slice(14, 4).ToArray();
-            DestinationAddress = buffer.Slice(22, 4).ToArray();
-            Login = buffer.Slice(36, 16).ToArray();*/
-    }
 
     private ulong SystemtimeEvent => BinaryPrimitives.ReadUInt64BigEndian(Span.Slice(0, 8));
     public byte ProtocolIndetifier => Span[8];
@@ -147,7 +126,7 @@ class OneRecord
      22:4 = DestinationAddress
      26:2 = DestinationPort
      28:8 = SessionId
-     36:16 = Login 
+     36:16 = Login
      */
 
     public string GetTargetFile()
@@ -201,7 +180,7 @@ class PairRecord
  */
 
     private readonly byte[] _buffer;
-    private Span<byte> span => _buffer;
+    public Span<byte> span => _buffer;
     private Span<byte> SystemTimeEventStart => span.Slice(0, 8);
     private Span<byte> SystemTimeEventStop => span.Slice(8, 8);
     public Span<byte> ProtocolIdentifier => span.Slice(16, 1);
@@ -214,7 +193,6 @@ class PairRecord
     private Span<byte> Login => span.Slice(39, 16);
 
     public Span<byte> PostNatSourceAddress => span.Slice(55, 4);
-    public ReadOnlySpan<byte> GetBuffer => span.Slice(0, 55);
 
 
     public string GetPath()
@@ -234,6 +212,8 @@ class PairRecord
         return string.Format("{0}.{1}.{2}.{3}.rawlog", PostNatSourceAddress[0], PostNatSourceAddress[1], PostNatSourceAddress[2], PostNatSourceAddress[3]);
     }
 }
+
+
 /*
  * Flex raw nat log format
  * 20b length:
@@ -260,19 +240,12 @@ class PairDataHeader
     public ReadOnlySpan<byte> Header => header;
 }
 
-class Packer
+class Packer(bool forceFileDelete = false)
 {
-    readonly Dictionary<ulong, OneRecord> oneRecords = new ();
-    private readonly Queue<OneRecord> unpairedRecords = new ();
-    private readonly Queue<PairRecord> pairRecords = new ();
-    private readonly Dictionary<string, StreamWriter> writes = new ();
-
-    private readonly bool _forceFileDelete;
-
-    public Packer(bool forceFileDelete = false)
-    {
-        _forceFileDelete = forceFileDelete;
-    }
+    readonly Dictionary<ulong, OneRecord> oneRecords = new();
+    private readonly Queue<OneRecord> unpairedRecords = new();
+    private readonly Queue<PairRecord> pairRecords = new();
+    private readonly Dictionary<string, StreamWriter> writes = new();
 
     public void Run(string inputFileName, string forceOutputPath)
     {
@@ -283,6 +256,7 @@ class Packer
         }
 
         Console.WriteLine("Processing file: {0}", inputFileName);
+        Stopwatch stopwatch = Stopwatch.StartNew();
         int writerCounter = 0;
         try
         {
@@ -294,26 +268,29 @@ class Packer
             {
                 OneRecord data = new OneRecord(buffer);
                 totalRecords++;
-                if (oneRecords.TryAdd(data.SessionId, data))
-                    continue;
-                var found = oneRecords[data.SessionId];
-                PairRecord newRecord = new PairRecord(data, found);
-                oneRecords.Remove(data.SessionId);
-                pairRecords.Enqueue(newRecord);
+                if (oneRecords.TryAdd(data.SessionId, data)) continue;
+                oneRecords.Remove(data.SessionId, out var found);
+
+                PairRecord newRecord = new(data, found);
+                if (newRecord.span.Length == 59)
+                    pairRecords.Enqueue(newRecord);
+
                 pairRecordCount++;
             }
 
-            if (!string.IsNullOrEmpty(forceOutputPath)&&!Directory.Exists(forceOutputPath))
+            if (!string.IsNullOrEmpty(forceOutputPath) && !Directory.Exists(forceOutputPath))
                 Directory.CreateDirectory(forceOutputPath!);
 
             Console.WriteLine("Total processed records: {0}", totalRecords);
             Console.WriteLine("Total found pairs: {0}", pairRecordCount);
             Console.WriteLine("Total unpaired: {0}", oneRecords.Count);
-            while (pairRecords.Any())
+            while (pairRecords.Count > 0)
             {
                 var record = pairRecords.Dequeue();
                 string dir =
-                    string.IsNullOrEmpty(forceOutputPath) ? record.GetPath() : string.Concat(forceOutputPath, Path.DirectorySeparatorChar, record.GetPath());
+                    string.IsNullOrEmpty(forceOutputPath)
+                        ? record.GetPath()
+                        : string.Concat(forceOutputPath, Path.DirectorySeparatorChar, record.GetPath());
 
                 string fname = string.Concat(dir, Path.DirectorySeparatorChar, record.GetTargetFile());
                 StreamWriter swf;
@@ -352,8 +329,9 @@ class Packer
                     swf = writes[fname];
                 }
 
-                swf.BaseStream.Write(record.GetBuffer);
+                swf.BaseStream.Write(record.span);
             }
+
 
             foreach (var rec in oneRecords.Values)
             {
@@ -372,11 +350,12 @@ class Packer
                     StreamWriter srw = new StreamWriter(string.Concat("unpaired.", unpairTarget), append: true);
                     _writers.Add(unpairTarget, srw);
                 }
+
                 _writers[unpairTarget].BaseStream.Write(rec.Span);
                 unpairedCount++;
             }
 
-            foreach(var kvp in _writers) 
+            foreach (var kvp in _writers)
                 kvp.Value.Close();
             Console.WriteLine("Written {0} unpaired records", unpairedCount);
             foreach (var writer in writes.Values)
@@ -392,10 +371,11 @@ class Packer
         catch (Exception e)
         {
             Console.WriteLine("The process failed: {0}", e.Message);
+            Console.WriteLine(e.StackTrace);
         }
         finally
         {
-            if (writerCounter > 0 && _forceFileDelete)
+            if (writerCounter > 0 && forceFileDelete)
             {
                 try
                 {
@@ -407,5 +387,7 @@ class Packer
                 }
             }
         }
+
+        Console.WriteLine("Measured time: {0}", stopwatch.Elapsed);
     }
 }

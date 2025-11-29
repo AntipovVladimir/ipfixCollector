@@ -1,14 +1,9 @@
 ﻿namespace fixclean;
 
 public class ByteArrayComparer : IEqualityComparer<byte[]> {
-    public bool Equals(byte[] a, byte[] b)
+    public bool Equals(byte[] x, byte[] y)
     {
-        if (a is null || b is null)
-            return false;
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-            if (a[i] != b[i]) return false;
-        return true;
+        return x.AsSpan().SequenceEqual(y.AsSpan());
     }
     public int GetHashCode(byte[] a)
     {

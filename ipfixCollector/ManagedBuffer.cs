@@ -1,6 +1,6 @@
 ﻿namespace ipfixCollector;
 
-public class ManagedBuffer:IDisposable
+public sealed class ManagedBuffer:IDisposable
 {
     private readonly int Capacity;
     private byte[] m_buffer;
@@ -14,7 +14,12 @@ public class ManagedBuffer:IDisposable
     }
     public bool IsFull => current == Capacity;
     public bool IsEmpty => current == 0;
-    public ReadOnlyMemory<byte> GetBufferArray() => m_buffer.AsSpan().Slice(0, _sliceSize*current).ToArray();
+
+    public ReadOnlyMemory<byte> GetBufferArray()
+    {
+        return IsFull ? m_buffer : m_buffer.AsSpan().Slice(0, _sliceSize * current).ToArray();
+    }
+
     public ReadOnlySpan<byte> GetBuffer() => m_buffer.AsSpan().Slice(0, _sliceSize*current);
 
     public void Flush()
@@ -40,14 +45,15 @@ public class ManagedBuffer:IDisposable
     }
 
     private bool isDisposed;
-    protected void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
         if (isDisposed) return;
         if (disposing)
         {
             Array.Clear(m_buffer);
         }
-        m_buffer = Array.Empty<byte>();
+
+        m_buffer = null;
         isDisposed = true;
     }
 }

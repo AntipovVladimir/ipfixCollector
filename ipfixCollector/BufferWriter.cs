@@ -1,8 +1,6 @@
-﻿using NLog;
+﻿namespace ipfixCollector;
 
-namespace ipfixCollector;
-
-public class BufferWriter : IDisposable
+public sealed class BufferWriter : IDisposable
 {
     private const int simultaneousBuffers = 32;
     private const int bufferLength = 8000; // packets
@@ -10,17 +8,16 @@ public class BufferWriter : IDisposable
     private StreamWriter _streamWriter;
     private static readonly TaskFactory m_task_factory = new();
     public long LastAccessedTime { get; private set; }
-    private static readonly Logger Log = LogManager.GetLogger("error");
-    private readonly string _filename;
+    
     public BufferWriter(string path, string filename)
     {
         if (!string.IsNullOrWhiteSpace(path) && !Directory.Exists(path))
             Directory.CreateDirectory(path);
-        _filename = filename;
         _streamWriter = new StreamWriter(filename, append: true);
         m_buffer = new ManagedBuffer(bufferLength);
         LastAccessedTime = Environment.TickCount64;
     }
+    
 
     private ManagedBuffer m_buffer;
     private readonly Queue<ManagedBuffer> m_buffers = new (simultaneousBuffers);
@@ -65,7 +62,7 @@ public class BufferWriter : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
         if (isDisposed) return;
         if (disposing)

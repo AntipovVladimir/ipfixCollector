@@ -25,12 +25,17 @@ using System.Text;
  */
 
 
-if (Environment.GetCommandLineArgs().Length < 2)
+void printHelp()
 {
     Console.WriteLine("Usage: searcher input.rawlog \"dd.mm.yyyy HH:mi\" [-u] [-ip aa.bb.cc.dd]");
     Console.WriteLine("options:");
     Console.WriteLine("\t-u - get unique matched logins only, instead of translation metadata");
     Console.WriteLine("\t-ip aa.bb.cc.dd - search only for certain translation matches destination ip");
+}
+
+if (Environment.GetCommandLineArgs().Length < 2)
+{
+    printHelp();
     return;
 }
 
@@ -58,11 +63,15 @@ foreach (var arg in iargs)
                     byte.TryParse(_strings[1], out byte b1);
                     byte.TryParse(_strings[2], out byte b2);
                     byte.TryParse(_strings[3], out byte b3);
-                    destIp = new[] { b0, b1, b2, b3 };
+                    destIp = [b0, b1, b2, b3];
                 }
             }
 
             break;
+        case "-h":
+        case "--help":
+            printHelp();
+            return;
     }
 
     index++;
@@ -75,7 +84,7 @@ if (!File.Exists(filename))
     return;
 }
 
-List<string> logins = new List<string>();
+List<string> logins = [];
 
 byte[] headerBuffer = new byte[20];
 DateTime argTime = DateTime.ParseExact(datetime, "dd.MM.yyyy HH:mm", null);
@@ -92,11 +101,11 @@ while (sr.BaseStream.Read(_dataBuffer, 0, 55) == 55)
     PairRecord pr = new PairRecord(_dataBuffer);
     if (ts2 < BinaryPrimitives.ReadUInt64BigEndian(pr.SystemTimeEventStart)
         || ts > BinaryPrimitives.ReadUInt64BigEndian(pr.SystemTimeEventStart)) continue;
-    if (destIp.Length == 4 && (pr.DestinationAddress[0] != destIp[0] 
-                               || pr.DestinationAddress[1] != destIp[1] 
-                               || pr.DestinationAddress[2] != destIp[2] 
+    if (destIp.Length == 4 && (pr.DestinationAddress[0] != destIp[0]
+                               || pr.DestinationAddress[1] != destIp[1]
+                               || pr.DestinationAddress[2] != destIp[2]
                                || pr.DestinationAddress[3] != destIp[3])) continue;
-    
+
     if (getUniqs)
     {
         string login = Encoding.ASCII.GetString(pr.Login).TrimEnd('\0');
@@ -112,14 +121,9 @@ foreach (var item in logins)
     Console.WriteLine(item);
 }
 
-class PairRecord
+class PairRecord(ReadOnlySpan<byte> buffer)
 {
-    public PairRecord(ReadOnlySpan<byte> buffer)
-    {
-        _buffer = buffer.ToArray();
-    }
-
-    private readonly byte[] _buffer;
+    private readonly byte[] _buffer = buffer.ToArray();
     private Span<byte> span => _buffer;
     public Span<byte> SystemTimeEventStart => span.Slice(0, 8);
     public Span<byte> SystemTimeEventStop => span.Slice(8, 8);
@@ -139,20 +143,18 @@ class PairRecord
         DateTime dateTimeS = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         ulong ts = BinaryPrimitives.ReadUInt64BigEndian(SystemTimeEventStart);
         ulong tstop = BinaryPrimitives.ReadUInt64BigEndian(SystemTimeEventStop);
-        bool hasStop = true;
         try
         {
             DateTime stop = dateTimeS.AddHours(3).AddMilliseconds(tstop);
+            sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: {stop} ({tstop}),");
         }
-        catch (Exception )
+        catch (Exception)
         {
-            hasStop = false;
-        }
-        if (hasStop)
-            sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: {dateTimeS.AddHours(3).AddMilliseconds(tstop)} ({tstop}),");
-        else 
             sb.Append($"Start: {dateTime.AddHours(3).AddMilliseconds(ts)} ({ts}) Stop: data corrupt (old version),");
-        sb.Append($"Protocol: {ProtocolIdentifier[0]},");
+        }
+
+            
+        sb.Append($"Protocol: {ProtocolIdentifier[0]}, ");
         sb.Append(
             $"Destination: {DestinationAddress[0]}.{DestinationAddress[1]}.{DestinationAddress[2]}.{DestinationAddress[3]}:{BinaryPrimitives.ReadUInt16BigEndian(DestinationPort)},");
         sb.Append(
